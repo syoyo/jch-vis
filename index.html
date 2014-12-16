@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<title>Jump consistent hash demo</title>
+<script src="d3.v3.min.js" charset="utf-8"></script>
+</head>
+<body>
+
+<button onclick="proc()" style="position:absolute; left:900px; top:50px;">Click me</button>
+
+<script>
+var gNumBuckets = 8;
+var gNumSamples = 200;
+var gHist = [];
+
+for (i = 0; i < gNumBuckets; i++) {
+  gHist.push(0);
+}
+
+function randomString(len, charSet) {
+    charSet = charSet || 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
+    var randomString = '';
+    for (var i = 0; i < len; i++) {
+      var randomPoz = Math.floor(Math.random() * charSet.length);
+      randomString += charSet.substring(randomPoz,randomPoz+1);
+    }
+    return randomString;
+}
+
+/**
+ * Calculate a 32 bit FNV-1a hash
+ * Found here: https://gist.github.com/vaiorabbit/5657561
+ * Ref.: http://isthe.com/chongo/tech/comp/fnv/
+ *
+ * @param {string} str the input value
+ * @param {boolean} [asString=false] set to true to return the hash value as 
+ *     8-digit hex string instead of an integer
+ * @param {integer} [seed] optionally pass the hash of the previous chunk
+ * @returns {integer | string}
+ */
+function hashFnv32a(str, asString, seed) {
+    /*jshint bitwise:false */
+    var i, l,
+        hval = (seed === undefined) ? 0x811c9dc5 : seed;
+
+    for (i = 0, l = str.length; i < l; i++) {
+        hval ^= str.charCodeAt(i);
+        hval += (hval << 1) + (hval << 4) + (hval << 7) + (hval << 8) + (hval << 24);
+    }
+    if( asString ){
+        // Convert to 8 digit hex string
+        return ("0000000" + (hval >>> 0).toString(16)).substr(-8);
+    }
+    return hval >>> 0;
+}
+
+function RandomGenerator( seed ){
+
+  this.x = 123456789;
+  this.y = 362436069;
+  this.z = 521288629;
+  this.w = seed || 88675123;
+
+  this.random = function(){
+
+    var t = ( this.x ^ (this.x << 11) ) & 0x7fffffff;
+    
+    this.x = this.y;
+    this.y = this.z;
+    this.z = this.w;
+    
+    this.w = ( this.w ^ (this.w >> 19) ^ ( t ^ ( t >> 8 )) );
+    
+    return this.w % 100000;
+  };
+
+  this.setSeed = function( seed ){
+    this.w = seed;
+  };
+}
+
+function jumpConsistentHash(key, numBuckets) {
+  // Simple linear version
+  var b = 0;
+  rnd = new RandomGenerator(key);
+
+  for (j = 1; j < numBuckets; j++) {
+    var r = rnd.random()/100000.0;
+    console.log(r)
+    if (r < (1.0 / (j+1))) b = j;
+  } 
+
+  return b;
+}
+
+var container = d3.select("body").append("svg").attr("width", 800).attr("height", 800);
+
+for (i = 0; i < gNumSamples; i++) {
+
+  var name = randomString(7);
+  var key = hashFnv32a(name, false);
+
+  var bucketID = jumpConsistentHash(key, gNumBuckets);
+  var x = bucketID * 50;
+  var y = gHist[bucketID] * 15;
+  gHist[bucketID]++;
+  console.log(x, y);
+
+  var c = container.append("circle").attr("cx", 50+x).attr("cy", 50+y).attr("r", 5).attr("id", name).style("fill", "purple");
+
+  //console.log("key = " + key + ", bucket = " + jumpConsistentHash(key, gNumBuckets))
+  //var s = d3.select("#" + name);
+  //s.transition().attr("cx", 100);
+
+}
+
+function proc() {
+  var newBucketSize = gNumBuckets + 1;
+  var cs = d3.selectAll("circle");
+  var h = 0;
+  cs[0].forEach(function(circle) {
+    var name = circle.id;
+    var key = hashFnv32a(name, false);
+
+    var bucketID = jumpConsistentHash(key, newBucketSize);
+
+    if (bucketID == (newBucketSize-1)) {
+      var s = d3.select("#" + name);
+      console.log(s)
+      s.transition().duration(5000).attr("cx", 50+bucketID*50).attr("cy", 50+h*15);
+      h++;
+    }
+  });
+}
+
+</script>
+
+</body>
